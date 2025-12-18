@@ -16,7 +16,7 @@ CURRENT_SEASON = 'FALL2025'
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-def save_to_excel(sender_name, sender_id, number, target_name, target_id, proof_url):
+def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_url):
     """Saves names for display and IDs for formula stability."""
     
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -41,14 +41,14 @@ def save_to_excel(sender_name, sender_id, number, target_name, target_id, proof_
         next_row += 1
 
     # Data Entry
-    sheet.cell(row=next_row, column=1).value = sender_name
+    sheet.cell(row=next_row, column=1).value = sniper_name
     sheet.cell(row=next_row, column=2).value = number
-    sheet.cell(row=next_row, column=3).value = target_name
+    sheet.cell(row=next_row, column=3).value = snipee_name
     sheet.cell(row=next_row, column=4).value = timestamp
     sheet.cell(row=next_row, column=5).value = proof_url
     # These are your "Anchor" columns for formulas
-    sheet.cell(row=next_row, column=6).value = str(sender_id) 
-    sheet.cell(row=next_row, column=7).value = str(target_id)
+    sheet.cell(row=next_row, column=6).value = str(sniper_id) 
+    sheet.cell(row=next_row, column=7).value = str(snipee_id)
     
     workbook.save(EXCEL_FILE)
 
@@ -69,16 +69,16 @@ async def on_ready():
 ])
 async def snipe(interaction: discord.Interaction, number: int, user: discord.User, proof: discord.Attachment):
     # Capture both Name (for display) and ID (for formulas)
-    sender_name = interaction.user.name
-    sender_id = interaction.user.id
-    target_name = user.name
-    target_id = user.id
+    sniper_name = interaction.user.name
+    sniper_id = interaction.user.id
+    snipee_name = user.name
+    snipee_id = user.id
     
     try:
-        save_to_excel(sender_name, sender_id, number, target_name, target_id, proof.url)
+        save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof.url)
         
         await interaction.response.send_message(
-            f"**<@{target_id}> got shot by {sender_name} for {number} points**\n"
+            f"**<@{snipee_id}> got shot by {sniper_name} for {number} points**\n"
             f"{proof.url}"
         )
 
