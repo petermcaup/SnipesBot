@@ -24,5 +24,6 @@ python snipes_bot.py
 Future features / To-Do list:
 - /stats or /leaderboard for users to quickly get info about the standings of the game
 - /appeal or /remove for users to request a change or deletion of a snipe (this would remove the need for an admin to go into the spreadsheet and delete or change data)
+- A queue system for snipes to be added to the sheet once the excel file is closed. This would require some sort of time-based loop checking whether the excel file is open and once it is detected as closed all the snipes in the queue get added. This makes it so the sniper doesn't have to resubmit the snipe and the timestamp can be correct no matter whether the spreadsheet is open at the time of originall submitting
 - A check for what channel the command is being run from or have the bot send the snipe confirmation message in the #ssnipes chat no matter where the user runs the command from
 - Make the excel macro run upon opening the spreadsheet to ensure clean and sorted data whenever viewing
