@@ -9,8 +9,8 @@ This is a personal project to automate the data collection for a game of snipes 
 
 If you'd like to run the bot yourself you can totally do that! My plan is to run the bot either from my desktop PC that I'll just leave on all the time or figure out how to run the bot from my raspberry pi which is currently unused.
 #### Installation instructions: ####
-Setup virtual env (which will end up in a .venv folder)
-From within the venv:
+Setup virtual env (which will end up in a .venv folder). 
+Then run the following from within the venv:
 ```bash
 # Install Requirements
 pip install -r requirements.txt
