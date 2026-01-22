@@ -5,7 +5,7 @@ import openpyxl
 import os
 from datetime import datetime
 # Ensure private.py contains TOKEN and OWNER_ID
-from . import private
+from private import private
 
 # --- CONFIGURATION ---
 TOKEN = private.token
