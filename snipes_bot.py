@@ -11,7 +11,7 @@ from private import private
 TOKEN = private.token
 OWNER_ID = private.owner_id
 EXCEL_FILE = 'SNIPESSTATS.xlsm' 
-CURRENT_SEASON = 'FALL2025'
+CURRENT_SEASON = 'SPRING2026'
 # ---------------------
 
 intents = discord.Intents.default()
