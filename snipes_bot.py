@@ -5,21 +5,20 @@ import openpyxl
 import os
 from datetime import datetime
 # Ensure private.py contains TOKEN and OWNER_ID
-from . import private
+from private import private
 
 # --- CONFIGURATION ---
 TOKEN = private.token
 OWNER_ID = private.owner_id
 EXCEL_FILE = 'SNIPESSTATS.xlsm' 
-CURRENT_SEASON = 'FALL2025'
+CURRENT_SEASON = 'SPRING2026'
 # ---------------------
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_url):
-    """Adds all relevant data (sniper & snipee (name & ID), points, timestamp, link to proof) to excel sheet."""
-    
+    """Adds all relevant data to excel sheet."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Load or Create Workbook and Sheet
@@ -62,30 +61,45 @@ async def on_ready():
         print(e)
 
 @bot.tree.command(name="snipe", description="Add a Snipe to the Excel Sheet")
-@app_commands.describe(number="Points value", user="Who did you snipe?", proof="Photo proof")
+@app_commands.describe(number="Points value", user="Who did you snipe? (Leave blank for Alumni)", proof="Photo proof")
 @app_commands.choices(number=[
     app_commands.Choice(name="1", value=1),
-    app_commands.Choice(name="2", value=2)
+    app_commands.Choice(name="2", value=2),
+    app_commands.Choice(name="Alumni Snipe", value=5)
 ])
-async def snipe(interaction: discord.Interaction, number: int, user: discord.User, proof: discord.Attachment):
+# Set user: discord.User = None to make it optional in Discord UI
+async def snipe(interaction: discord.Interaction, number: int, proof: discord.Attachment, user: discord.User = None):
+    # 1. Defer to avoid timeout
+    await interaction.response.defer()
+    
     sniper_name = interaction.user.name
     sniper_id = interaction.user.id
-    snipee_name = user.name
-    snipee_id = user.id
+
+    # 2. Check for Alumni Logic
+    if user is None:
+        if number == 5:
+            snipee_name = "Alumni"
+            snipee_id = "0000" # Placeholder ID for your formulas
+            display_message = f"**{sniper_name} got an Alumni Snipe for 5 points!**"
+        else:
+            # Error case: User skipped 'user' but didn't pick Alumni Snipe
+            await interaction.followup.send("❌ You must select a user unless it is an Alumni Snipe (5 pts).")
+            return
+    else:
+        snipee_name = user.name
+        snipee_id = user.id
+        display_message = f"**<@{snipee_id}> got shot by {sniper_name} for {number} points**"
     
-    # Save to Excel and handle error if file is open
+    # 3. Save and Respond
     try:
         save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof.url)
         
-        await interaction.response.send_message(
-            f"**<@{snipee_id}> got shot by {sniper_name} for {number} points**\n"
-            f"{proof.url}"
-        )
+        await interaction.followup.send(f"{display_message}\n{proof.url}")
 
     except PermissionError:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"**ERROR LOGGING SNIPE**\n"
-            f"⚠️ <@{OWNER_ID}> **NEEDS TO CLOSE THE EXCEL SHEET** snipes cannot be logged while the file is open."
+            f"⚠️ <@{OWNER_ID}> **NEEDS TO CLOSE THE EXCEL SHEET**"
         )
 
 bot.run(TOKEN)
