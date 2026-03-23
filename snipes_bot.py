@@ -2,21 +2,36 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import openpyxl
-import os
 import json
 from datetime import datetime
 from private import private
+import sys
+import os
+
+# --- DYNAMIC PATHING ---
+if getattr(sys, 'frozen', False):
+    # Path of the .exe inside the 'dist' folder
+    EXE_LOCATION = os.path.dirname(sys.executable)
+    # Move UP one level to the main 'SnipesBot' folder
+    BASE_DIR = os.path.dirname(EXE_LOCATION)
+else:
+    # If running as a .py script, assume it's already in the main folder
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # --- CONFIGURATION ---
 TOKEN = private.token
 OWNER_ID = int(private.owner_id) 
-EXCEL_FILE = 'SNIPESSTATS.xlsm' 
-# Path to the persistent data file
-REG_FILE = os.path.join('private', 'registrations.json')
 
-# Ensure the private directory exists
-if not os.path.exists('private'):
-    os.makedirs('private')
+# These will now point to SnipesBot\SNIPESSTATS.xlsm instead of SnipesBot\dist\SNIPESSTATS.xlsm
+EXCEL_FILE = os.path.join(BASE_DIR, 'SNIPESSTATS.xlsm') 
+REG_FILE = os.path.join(BASE_DIR, 'private', 'registrations.json')
+
+# Ensure the private directory exists in the main folder
+PRIVATE_DIR = os.path.join(BASE_DIR, 'private')
+if not os.path.exists(PRIVATE_DIR):
+    os.makedirs(PRIVATE_DIR)
+
+print(f"Bot starting... Working Directory: {BASE_DIR}")
 
 # --- DATA PERSISTENCE HELPERS ---
 
@@ -198,11 +213,10 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
         save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof.url)
         await interaction.followup.send(f"{display_message}\n{proof.url}")
     except PermissionError:
-        await interaction.followup.send(
-            f"**ERROR LOGGING SNIPE**\n"
-            f"⚠️ <@{OWNER_ID}> **NEEDS TO CLOSE THE EXCEL SHEET**"
-        )
+        await interaction.followup.send(f"⚠️ <@{OWNER_ID}> **CLOSE THE EXCEL SHEET**")
     except Exception as e:
-        await interaction.followup.send(f"❌ An unexpected error occurred: {e}")
+        # THIS IS YOUR DEBUGGER: It will print the exact error to Discord
+        await interaction.followup.send(f"❌ **TECHNICAL ERROR:** `{str(e)}`")
+        print(f"Error details: {e}")
 
 bot.run(TOKEN)
