@@ -7,6 +7,8 @@ from datetime import datetime
 from private import private
 import sys
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 # --- DYNAMIC PATHING ---
 if getattr(sys, 'frozen', False):
@@ -38,6 +40,14 @@ if not os.path.exists(PROOFS_DIR):
     os.makedirs(PROOFS_DIR)
 
 print(f"Bot starting... Working Directory: {BASE_DIR}")
+
+# Thread pool for blocking I/O operations
+executor = ThreadPoolExecutor(max_workers=1)
+
+async def save_workbook_async(workbook):
+    """Save workbook in a thread to avoid blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(executor, workbook.save, EXCEL_FILE)
 
 # --- DATA PERSISTENCE HELPERS ---
 
@@ -120,7 +130,7 @@ async def download_attachment(attachment: discord.Attachment) -> str:
 
 # --- EXCEL LOGIC ---
 
-def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_path):
+async def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_path):
     """Saves snipe data to the specific season tab in Excel."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -144,7 +154,7 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
     sheet.cell(row=next_row, column=6).value = str(sniper_id)
     sheet.cell(row=next_row, column=7).value = str(snipee_id)
 
-    workbook.save(EXCEL_FILE)
+    await save_workbook_async(workbook)
 
     tracker[CURRENT_SEASON] = next_row + 1
     save_row_tracker(tracker)
@@ -385,7 +395,7 @@ async def edit_snipe(interaction: discord.Interaction, row: int, field: str, val
 
         # Update the cell
         sheet.cell(row=excel_row, column=column).value = value
-        workbook.save(EXCEL_FILE)
+        await save_workbook_async(workbook)
 
         await interaction.followup.send(
             f"✅ **Updated:**\n"
@@ -408,7 +418,7 @@ async def download_sheet(interaction: discord.Interaction):
     try:
         # Ensure the workbook is saved to disk
         workbook = get_workbook()
-        workbook.save(EXCEL_FILE)
+        await save_workbook_async(workbook)
 
         # Send the file as an attachment
         excel_file = discord.File(EXCEL_FILE, filename=f"SNIPESSTATS_{CURRENT_SEASON}.xlsx")
@@ -467,7 +477,7 @@ async def delete_snipe(interaction: discord.Interaction, row: int):
                 sheet.delete_rows(excel_row, 1)
                 break
 
-        workbook.save(EXCEL_FILE)
+        await save_workbook_async(workbook)
 
         # Update row tracker
         tracker = load_row_tracker()
@@ -532,7 +542,7 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
     print(f"[SNIPE] About to download attachment: {proof.filename} ({proof.size} bytes)")
     try:
         proof_path = await download_attachment(proof)
-        save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof_path)
+        await save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof_path)
 
         proof_file = discord.File(proof_path, filename=os.path.basename(proof_path))
         await interaction.followup.send(f"{display_message}", file=proof_file)
