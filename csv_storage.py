@@ -1,6 +1,8 @@
 import csv
 import os
 from datetime import datetime
+import openpyxl
+from openpyxl.utils import get_column_letter
 
 def get_csv_path(season):
     """Get CSV file path for a season."""
@@ -67,27 +69,23 @@ def delete_snipe(season, sniper, snipee, points):
         writer.writeheader()
         writer.writerows(snipes)
 
-if __name__ == '__main__':
-    # Test
-    append_snipe('TEST2026', 'Alice', 2, 'Bob', '2026-08-31 12:00:00', '/path/to/proof.jpg', '123', '456')
-    snipes = get_snipes('TEST2026')
-    print(f"Snipes: {snipes}")
-
-def merge_csv_to_excel(season, workbook):
-    """Merge CSV snipes into Excel sheet for the current season only. Preserves all other sheets."""
-    import openpyxl
-
-    # Get or create the sheet for current season
-    if season in workbook.sheetnames:
-        sheet = workbook[season]
-        # Delete all data rows (keep header in row 1)
-        if sheet.max_row > 1:
-            sheet.delete_rows(2, sheet.max_row)
-    else:
-        sheet = workbook.create_sheet(season)
+def merge_csv_to_excel(season, excel_file_path):
+    """Merge CSV into Excel file. Preserves all other sheets and formatting."""
+    # Load workbook with data_only=False to preserve formatting
+    wb = openpyxl.load_workbook(excel_file_path)
+    
+    # Get or create the sheet
+    if season not in wb.sheetnames:
+        sheet = wb.create_sheet(season)
         sheet.append(['Sniper', 'Points', 'Snipee', 'Timestamp', 'Proof Link', 'Sniper ID', 'Snipee ID'])
-
-    # Read CSV and write to Excel (starts at row 2)
+    else:
+        sheet = wb[season]
+    
+    # Delete data rows (keep header in row 1)
+    while sheet.max_row > 1:
+        sheet.delete_rows(2, 1)
+    
+    # Read CSV and write to Excel
     snipes = get_snipes(season)
     for idx, snipe in enumerate(snipes, start=2):
         sheet.cell(row=idx, column=1).value = snipe['Sniper']
@@ -97,6 +95,7 @@ def merge_csv_to_excel(season, workbook):
         sheet.cell(row=idx, column=5).value = snipe['Proof Link']
         sheet.cell(row=idx, column=6).value = snipe['Sniper ID']
         sheet.cell(row=idx, column=7).value = snipe['Snipee ID']
-
-    # All other sheets remain untouched
-    return workbook
+    
+    # Save workbook (preserves all other sheets)
+    wb.save(excel_file_path)
+    return wb
