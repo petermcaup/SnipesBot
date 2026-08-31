@@ -81,6 +81,27 @@ def save_row_tracker(tracker):
 _initial_data = load_data()
 CURRENT_SEASON = _initial_data.get("season", "SPRING2026")
 
+# Cache workbook in memory to avoid reloading on every snipe
+_workbook_cache = None
+_workbook_cache_season = None
+
+def get_workbook():
+    """Returns cached workbook, reloading only if season changed."""
+    global _workbook_cache, _workbook_cache_season
+
+    if _workbook_cache is not None and _workbook_cache_season == CURRENT_SEASON:
+        return _workbook_cache
+
+    load_start = time.time()
+    if not os.path.exists(EXCEL_FILE):
+        _workbook_cache = openpyxl.Workbook()
+    else:
+        _workbook_cache = openpyxl.load_workbook(EXCEL_FILE)
+
+    _workbook_cache_season = CURRENT_SEASON
+    print(f"[TIMER] Loaded workbook from disk: {time.time() - load_start:.3f}s")
+    return _workbook_cache
+
 def get_display_name(user_id, default_name):
     """Returns registered name or discord username."""
     data = load_data()
@@ -107,27 +128,17 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
     start_time = time.time()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    load_start = time.time()
-    if not os.path.exists(EXCEL_FILE):
-        workbook = openpyxl.Workbook()
-        sheet = workbook.active
-        sheet.title = CURRENT_SEASON
-        sheet.append(["Sniper", "Points", "Snipee", "Timestamp", "Proof Link", "Sniper ID", "Snipee ID"])
-        next_row = 2
-        print(f"[TIMER] Created new workbook: {time.time() - load_start:.3f}s")
+    workbook = get_workbook()
+
+    # Check if season tab exists, else create it
+    if CURRENT_SEASON in workbook.sheetnames:
+        sheet = workbook[CURRENT_SEASON]
     else:
-        workbook = openpyxl.load_workbook(EXCEL_FILE)
-        print(f"[TIMER] Loaded workbook: {time.time() - load_start:.3f}s")
+        sheet = workbook.create_sheet(CURRENT_SEASON)
+        sheet.append(["Sniper", "Points", "Snipee", "Timestamp", "Proof Link", "Sniper ID", "Snipee ID"])
 
-        # Check if season tab exists, else create it
-        if CURRENT_SEASON in workbook.sheetnames:
-            sheet = workbook[CURRENT_SEASON]
-        else:
-            sheet = workbook.create_sheet(CURRENT_SEASON)
-            sheet.append(["Sniper", "Points", "Snipee", "Timestamp", "Proof Link", "Sniper ID", "Snipee ID"])
-
-        tracker = load_row_tracker()
-        next_row = tracker.get(CURRENT_SEASON, 2)
+    tracker = load_row_tracker()
+    next_row = tracker.get(CURRENT_SEASON, 2)
 
     write_start = time.time()
     sheet.cell(row=next_row, column=1).value = sniper_name
@@ -143,7 +154,6 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
     workbook.save(EXCEL_FILE)
     print(f"[TIMER] Saved workbook: {time.time() - save_start:.3f}s")
 
-    tracker = load_row_tracker()
     tracker[CURRENT_SEASON] = next_row + 1
     save_row_tracker(tracker)
 
