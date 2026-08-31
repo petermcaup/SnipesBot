@@ -369,6 +369,60 @@ async def edit_snipe(interaction: discord.Interaction, row: int, field: str, val
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
+@bot.tree.command(name="delete_snipe", description="Delete a snipe from the logs (Owner Only)")
+@app_commands.describe(row="Row number from /list_snipes")
+async def delete_snipe(interaction: discord.Interaction, row: int):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        workbook = get_workbook()
+
+        if CURRENT_SEASON not in workbook.sheetnames:
+            await interaction.followup.send("No snipes to delete.", ephemeral=True)
+            return
+
+        sheet = workbook[CURRENT_SEASON]
+        rows = list(sheet.iter_rows(values_only=True))
+
+        if len(rows) <= 1:
+            await interaction.followup.send("No snipes to delete.", ephemeral=True)
+            return
+
+        # Calculate actual Excel row number (skip header, account for list being most recent first)
+        snipes = rows[1:]
+        if row < 1 or row > len(snipes):
+            await interaction.followup.send(f"❌ Invalid row number. Use a number from 1 to {len(snipes)}.", ephemeral=True)
+            return
+
+        excel_row = len(snipes) - row + 2  # +2 because Excel rows are 1-indexed and row 1 is header
+
+        # Get the snipe info for confirmation
+        sniper = sheet.cell(row=excel_row, column=1).value
+        snipee = sheet.cell(row=excel_row, column=3).value
+        points = sheet.cell(row=excel_row, column=2).value
+
+        # Delete the row
+        sheet.delete_rows(excel_row, 1)
+        workbook.save(EXCEL_FILE)
+
+        # Update row tracker
+        tracker = load_row_tracker()
+        if CURRENT_SEASON in tracker:
+            tracker[CURRENT_SEASON] -= 1
+        save_row_tracker(tracker)
+
+        await interaction.followup.send(
+            f"🗑️ **Deleted Snipe:**\n"
+            f"{sniper} → {snipee} ({points}pts)",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 # --- MAIN GAME COMMAND ---
 
 @bot.tree.command(name="snipe", description="Add a Snipe to the Excel Sheet")
@@ -380,6 +434,11 @@ async def edit_snipe(interaction: discord.Interaction, row: int, field: str, val
 ])
 async def snipe(interaction: discord.Interaction, number: int, proof: discord.Attachment, user: discord.User = None):
     await interaction.response.defer()
+
+    # Check if command is being run in the correct channel
+    if interaction.channel.name != "ssnipes":
+        await interaction.followup.send(f"❌ Snipes must be recorded in #ssnipes channel.", ephemeral=True)
+        return
 
     sniper_display = get_display_name(interaction.user.id, interaction.user.name)
     sniper_id = interaction.user.id
@@ -394,6 +453,17 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
             await interaction.followup.send("❌ You must select a user unless it is an Alumni Snipe (5 pts).", ephemeral=True)
             return
     else:
+        data = load_data()
+        regs = data.get("registrations", {})
+
+        # Check if the snipee is registered
+        if str(user.id) not in regs:
+            await interaction.followup.send(
+                f"❌ **{user.name}** is not registered. Ask an admin to register them first using `/register`.",
+                ephemeral=True
+            )
+            return
+
         snipee_display = get_display_name(user.id, user.name)
         snipee_id = user.id
         display_message = f"**<@{snipee_id}> ({snipee_display}) got shot by {sniper_display} for {number} points**"
