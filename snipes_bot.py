@@ -239,7 +239,8 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
         save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof_path)
         print(f"[SNIPE] Excel saved successfully")
 
-        await interaction.followup.send(f"{display_message}\n*Proof saved as: `{os.path.basename(proof_path)}`*")
+        proof_file = discord.File(proof_path, filename=os.path.basename(proof_path))
+        await interaction.followup.send(f"{display_message}", file=proof_file)
         print(f"[SNIPE] Discord message sent successfully")
     except ValueError as e:
         await interaction.followup.send(f"❌ **File Error:** {str(e)}")
