@@ -7,7 +7,6 @@ from datetime import datetime
 from private import private
 import sys
 import os
-import time
 
 # --- DYNAMIC PATHING ---
 if getattr(sys, 'frozen', False):
@@ -99,7 +98,6 @@ def get_workbook():
         _workbook_cache = openpyxl.load_workbook(EXCEL_FILE)
 
     _workbook_cache_season = CURRENT_SEASON
-    print(f"[TIMER] Loaded workbook from disk: {time.time() - load_start:.3f}s")
     return _workbook_cache
 
 def get_display_name(user_id, default_name):
@@ -125,7 +123,6 @@ async def download_attachment(attachment: discord.Attachment) -> str:
 
 def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_path):
     """Saves snipe data to the specific season tab in Excel."""
-    start_time = time.time()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     workbook = get_workbook()
@@ -140,7 +137,6 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
     tracker = load_row_tracker()
     next_row = tracker.get(CURRENT_SEASON, 2)
 
-    write_start = time.time()
     sheet.cell(row=next_row, column=1).value = sniper_name
     sheet.cell(row=next_row, column=2).value = number
     sheet.cell(row=next_row, column=3).value = snipee_name
@@ -148,16 +144,11 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
     sheet.cell(row=next_row, column=5).value = proof_path
     sheet.cell(row=next_row, column=6).value = str(sniper_id)
     sheet.cell(row=next_row, column=7).value = str(snipee_id)
-    print(f"[TIMER] Wrote cells: {time.time() - write_start:.3f}s")
 
-    save_start = time.time()
     workbook.save(EXCEL_FILE)
-    print(f"[TIMER] Saved workbook: {time.time() - save_start:.3f}s")
 
     tracker[CURRENT_SEASON] = next_row + 1
     save_row_tracker(tracker)
-
-    print(f"[TIMER] Total Excel operation: {time.time() - start_time:.3f}s")
 
 # --- BOT SETUP ---
 
@@ -238,6 +229,146 @@ async def deregister_autocomplete(interaction: discord.Interaction, current: str
         app_commands.Choice(name=n, value=n)
         for n in names if current.lower() in n.lower()
     ][:25]
+
+@bot.tree.command(name="list_users", description="Show all registered users (Owner Only)")
+async def list_users(interaction: discord.Interaction):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
+        return
+
+    data = load_data()
+    regs = data.get("registrations", {})
+
+    if not regs:
+        await interaction.response.send_message("No registered users yet.", ephemeral=True)
+        return
+
+    user_list = "\n".join([f"• {name} (ID: {uid})" for uid, name in regs.items()])
+    await interaction.response.send_message(
+        f"**Registered Users ({len(regs)}):**\n```\n{user_list}\n```",
+        ephemeral=True
+    )
+
+@bot.tree.command(name="list_snipes", description="Show recent snipes (Owner Only)")
+@app_commands.describe(count="Number of recent snipes to show (default: 10)")
+async def list_snipes(interaction: discord.Interaction, count: int = 10):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        workbook = get_workbook()
+
+        if CURRENT_SEASON not in workbook.sheetnames:
+            await interaction.followup.send(f"No data in `{CURRENT_SEASON}` tab yet.", ephemeral=True)
+            return
+
+        sheet = workbook[CURRENT_SEASON]
+        rows = list(sheet.iter_rows(values_only=True))
+
+        if len(rows) <= 1:  # Only header row
+            await interaction.followup.send(f"No snipes recorded in `{CURRENT_SEASON}` yet.", ephemeral=True)
+            return
+
+        # Get the last N snipes (skip header)
+        snipes = rows[1:][-count:]
+        snipes.reverse()  # Most recent first
+
+        snipe_lines = []
+        for idx, (sniper, points, snipee, timestamp, proof, sniper_id, snipee_id) in enumerate(snipes, 1):
+            snipe_lines.append(
+                f"**{idx}.** {sniper} → {snipee} | {points}pts | {timestamp}"
+            )
+
+        message = "\n".join(snipe_lines)
+        await interaction.followup.send(
+            f"**Recent Snipes (Last {len(snipes)}):**\n{message}",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name="edit_snipe", description="Edit a recent snipe (Owner Only)")
+@app_commands.describe(
+    row="Row number from /list_snipes (use this to identify the snipe)",
+    field="Which field to edit: sniper, snipee, points, or timestamp",
+    value="The new value"
+)
+@app_commands.choices(field=[
+    app_commands.Choice(name="sniper", value="sniper"),
+    app_commands.Choice(name="snipee", value="snipee"),
+    app_commands.Choice(name="points", value="points"),
+    app_commands.Choice(name="timestamp", value="timestamp")
+])
+async def edit_snipe(interaction: discord.Interaction, row: int, field: str, value: str):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        workbook = get_workbook()
+
+        if CURRENT_SEASON not in workbook.sheetnames:
+            await interaction.followup.send("No snipes to edit.", ephemeral=True)
+            return
+
+        sheet = workbook[CURRENT_SEASON]
+        rows = list(sheet.iter_rows(values_only=True))
+
+        if len(rows) <= 1:
+            await interaction.followup.send("No snipes to edit.", ephemeral=True)
+            return
+
+        # Calculate actual Excel row number (skip header, account for list being most recent first)
+        snipes = rows[1:]
+        if row < 1 or row > len(snipes):
+            await interaction.followup.send(f"❌ Invalid row number. Use a number from 1 to {len(snipes)}.", ephemeral=True)
+            return
+
+        excel_row = len(snipes) - row + 2  # +2 because Excel rows are 1-indexed and row 1 is header
+
+        # Map field names to column numbers
+        field_columns = {
+            "sniper": 1,
+            "points": 2,
+            "snipee": 3,
+            "timestamp": 4
+        }
+
+        if field not in field_columns:
+            await interaction.followup.send("❌ Invalid field. Use: sniper, snipee, points, or timestamp.", ephemeral=True)
+            return
+
+        column = field_columns[field]
+
+        # Validate points is a number if editing points
+        if field == "points":
+            try:
+                value = int(value)
+            except ValueError:
+                await interaction.followup.send("❌ Points must be a number.", ephemeral=True)
+                return
+
+        # Get old value for confirmation
+        old_value = sheet.cell(row=excel_row, column=column).value
+
+        # Update the cell
+        sheet.cell(row=excel_row, column=column).value = value
+        workbook.save(EXCEL_FILE)
+
+        await interaction.followup.send(
+            f"✅ **Updated:**\n"
+            f"Field: `{field}`\n"
+            f"Old value: `{old_value}`\n"
+            f"New value: `{value}`",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
 # --- MAIN GAME COMMAND ---
 
