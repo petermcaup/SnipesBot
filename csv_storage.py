@@ -72,3 +72,31 @@ if __name__ == '__main__':
     append_snipe('TEST2026', 'Alice', 2, 'Bob', '2026-08-31 12:00:00', '/path/to/proof.jpg', '123', '456')
     snipes = get_snipes('TEST2026')
     print(f"Snipes: {snipes}")
+
+def merge_csv_to_excel(season, workbook):
+    """Merge CSV snipes into Excel sheet for the current season."""
+    import openpyxl
+    
+    # Get or create the sheet
+    if season in workbook.sheetnames:
+        sheet = workbook[season]
+        # Clear existing data (keep header)
+        for row in sheet.iter_rows(min_row=2):
+            for cell in row:
+                cell.value = None
+    else:
+        sheet = workbook.create_sheet(season)
+        sheet.append(['Sniper', 'Points', 'Snipee', 'Timestamp', 'Proof Link', 'Sniper ID', 'Snipee ID'])
+    
+    # Read CSV and write to Excel
+    snipes = get_snipes(season)
+    for idx, snipe in enumerate(snipes, start=2):
+        sheet.cell(row=idx, column=1).value = snipe['Sniper']
+        sheet.cell(row=idx, column=2).value = int(snipe['Points'])
+        sheet.cell(row=idx, column=3).value = snipe['Snipee']
+        sheet.cell(row=idx, column=4).value = snipe['Timestamp']
+        sheet.cell(row=idx, column=5).value = snipe['Proof Link']
+        sheet.cell(row=idx, column=6).value = snipe['Sniper ID']
+        sheet.cell(row=idx, column=7).value = snipe['Snipee ID']
+    
+    return workbook
