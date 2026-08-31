@@ -11,7 +11,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import schedule
 from google_drive_backup import upload_backup
-from csv_storage import append_snipe, get_snipes, edit_snipe, delete_snipe
+from csv_storage import append_snipe, get_snipes, edit_snipe, delete_snipe, merge_csv_to_excel
 
 # --- DYNAMIC PATHING ---
 if getattr(sys, 'frozen', False):
@@ -419,8 +419,17 @@ async def download_sheet(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
     try:
-        # Ensure the workbook is saved to disk
+        # Merge CSV into Excel (current season only)
         workbook = get_workbook()
+        loop = asyncio.get_event_loop()
+        workbook = await loop.run_in_executor(
+            executor,
+            merge_csv_to_excel,
+            CURRENT_SEASON,
+            workbook
+        )
+
+        # Save the merged workbook
         await save_workbook_async(workbook)
 
         # Send the file as an attachment
