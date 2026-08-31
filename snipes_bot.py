@@ -11,6 +11,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import schedule
 from google_drive_backup import upload_backup
+from csv_storage import append_snipe, get_snipes, edit_snipe, delete_snipe
 
 # --- DYNAMIC PATHING ---
 if getattr(sys, 'frozen', False):
@@ -298,33 +299,23 @@ async def list_snipes(interaction: discord.Interaction, count: int = 10):
     await interaction.response.defer(ephemeral=True)
 
     try:
-        workbook = get_workbook()
-
-        if CURRENT_SEASON not in workbook.sheetnames:
-            await interaction.followup.send(f"No data in `{CURRENT_SEASON}` tab yet.", ephemeral=True)
-            return
-
-        sheet = workbook[CURRENT_SEASON]
-        rows = list(sheet.iter_rows(values_only=True))
-
-        if len(rows) <= 1:  # Only header row
-            await interaction.followup.send(f"No snipes recorded in `{CURRENT_SEASON}` yet.", ephemeral=True)
-            return
-
-        # Filter out empty rows (where sniper column is None)
-        snipes = [row for row in rows[1:] if row[0] is not None]
+        # Read from CSV instead of Excel
+        snipes = get_snipes(CURRENT_SEASON)
 
         if not snipes:
             await interaction.followup.send(f"No snipes recorded in `{CURRENT_SEASON}` yet.", ephemeral=True)
             return
 
         # Get the last N snipes (most recent first)
-        snipes = snipes[-count:]
-        snipes.reverse()
+        snipes_to_show = snipes[-count:]
+        snipes_to_show.reverse()
 
         snipe_lines = []
-        for idx, row in enumerate(snipes, 1):
-            sniper, points, snipee, timestamp = row[0], row[1], row[2], row[3]
+        for idx, snipe in enumerate(snipes_to_show, 1):
+            sniper = snipe['Sniper']
+            points = snipe['Points']
+            snipee = snipe['Snipee']
+            timestamp = snipe['Timestamp']
             snipe_lines.append(
                 f"**{idx}.** {sniper} → {snipee} | {points}pts | {timestamp}"
             )
@@ -357,60 +348,34 @@ async def edit_snipe(interaction: discord.Interaction, row: int, field: str, val
     await interaction.response.defer(ephemeral=True)
 
     try:
-        workbook = get_workbook()
+        # Read from CSV instead of Excel
+        csv_snipes = get_snipes(CURRENT_SEASON)
 
-        if CURRENT_SEASON not in workbook.sheetnames:
+        if not csv_snipes:
             await interaction.followup.send("No snipes to edit.", ephemeral=True)
             return
 
-        sheet = workbook[CURRENT_SEASON]
-        rows = list(sheet.iter_rows(values_only=True))
-
-        if len(rows) <= 1:
-            await interaction.followup.send("No snipes to edit.", ephemeral=True)
+        if row < 1 or row > len(csv_snipes):
+            await interaction.followup.send(f"❌ Invalid row number. Use a number from 1 to {len(csv_snipes)}.", ephemeral=True)
             return
 
-        # Filter out empty rows (where sniper column is None)
-        snipes = [row for row in rows[1:] if row[0] is not None]
-
-        if not snipes:
-            await interaction.followup.send("No snipes to edit.", ephemeral=True)
-            return
-
-        if row < 1 or row > len(snipes):
-            await interaction.followup.send(f"❌ Invalid row number. Use a number from 1 to {len(snipes)}.", ephemeral=True)
-            return
-
-        # Get the snipe to edit (accounting for reverse order: most recent first)
-        snipe_to_edit = snipes[-row]
-        sniper_match, points_match, snipee_match = snipe_to_edit[0], snipe_to_edit[1], snipe_to_edit[2]
-
-        # Find the actual Excel row number by searching for this snipe
-        excel_row = None
-        for search_row in range(2, sheet.max_row + 1):
-            if (sheet.cell(row=search_row, column=1).value == sniper_match and
-                sheet.cell(row=search_row, column=3).value == snipee_match and
-                sheet.cell(row=search_row, column=2).value == points_match):
-                excel_row = search_row
-                break
-
-        if excel_row is None:
-            await interaction.followup.send("❌ Could not find snipe to edit.", ephemeral=True)
-            return
-
-        # Map field names to column numbers
-        field_columns = {
-            "sniper": 1,
-            "points": 2,
-            "snipee": 3,
-            "timestamp": 4
+        # Map field names
+        field_map = {
+            "sniper": "Sniper",
+            "points": "Points",
+            "snipee": "Snipee",
+            "timestamp": "Timestamp"
         }
 
-        if field not in field_columns:
+        if field not in field_map:
             await interaction.followup.send("❌ Invalid field. Use: sniper, snipee, points, or timestamp.", ephemeral=True)
             return
 
-        column = field_columns[field]
+        # Get the snipe to edit (accounting for reverse order: most recent first)
+        snipe_to_edit = csv_snipes[-row]
+        sniper_match = snipe_to_edit['Sniper']
+        snipee_match = snipe_to_edit['Snipee']
+        points_match = snipe_to_edit['Points']
 
         # Validate points is a number if editing points
         if field == "points":
@@ -420,12 +385,20 @@ async def edit_snipe(interaction: discord.Interaction, row: int, field: str, val
                 await interaction.followup.send("❌ Points must be a number.", ephemeral=True)
                 return
 
-        # Get old value for confirmation
-        old_value = sheet.cell(row=excel_row, column=column).value
+        old_value = snipe_to_edit[field_map[field]]
 
-        # Update the cell
-        sheet.cell(row=excel_row, column=column).value = value
-        await save_workbook_async(workbook)
+        # Edit in CSV
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            executor,
+            edit_snipe,
+            CURRENT_SEASON,
+            sniper_match,
+            snipee_match,
+            points_match,
+            field_map[field],
+            str(value)
+        )
 
         await interaction.followup.send(
             f"✅ **Updated:**\n"
@@ -483,37 +456,33 @@ async def delete_snipe(interaction: discord.Interaction, row: int):
             await interaction.followup.send("No snipes to delete.", ephemeral=True)
             return
 
-        # Filter out empty rows (where sniper column is None)
-        snipes = [row for row in rows[1:] if row[0] is not None]
+        # Read from CSV instead of Excel
+        csv_snipes = get_snipes(CURRENT_SEASON)
 
-        if not snipes:
+        if not csv_snipes:
             await interaction.followup.send("No snipes to delete.", ephemeral=True)
             return
 
-        if row < 1 or row > len(snipes):
-            await interaction.followup.send(f"❌ Invalid row number. Use a number from 1 to {len(snipes)}.", ephemeral=True)
+        if row < 1 or row > len(csv_snipes):
+            await interaction.followup.send(f"❌ Invalid row number. Use a number from 1 to {len(csv_snipes)}.", ephemeral=True)
             return
 
         # Get the snipe to delete (accounting for reverse order: most recent first)
-        snipe_to_delete = snipes[-row]
-        sniper, points, snipee = snipe_to_delete[0], snipe_to_delete[1], snipe_to_delete[2]
+        snipe_to_delete = csv_snipes[-row]
+        sniper = snipe_to_delete['Sniper']
+        snipee = snipe_to_delete['Snipee']
+        points = snipe_to_delete['Points']
 
-        # Find the actual Excel row number by searching for this snipe
-        for excel_row in range(2, sheet.max_row + 1):
-            if (sheet.cell(row=excel_row, column=1).value == sniper and
-                sheet.cell(row=excel_row, column=3).value == snipee and
-                sheet.cell(row=excel_row, column=2).value == points):
-                # Delete the row
-                sheet.delete_rows(excel_row, 1)
-                break
-
-        await save_workbook_async(workbook)
-
-        # Update row tracker
-        tracker = load_row_tracker()
-        if CURRENT_SEASON in tracker:
-            tracker[CURRENT_SEASON] -= 1
-        save_row_tracker(tracker)
+        # Delete from CSV
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            executor,
+            delete_snipe,
+            CURRENT_SEASON,
+            sniper,
+            snipee,
+            points
+        )
 
         await interaction.followup.send(
             f"🗑️ **Deleted Snipe:**\n"
@@ -572,7 +541,21 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
     print(f"[SNIPE] About to download attachment: {proof.filename} ({proof.size} bytes)")
     try:
         proof_path = await download_attachment(proof)
-        await save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof_path)
+
+        # Save to CSV instead of Excel (fast!)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            executor,
+            append_snipe,
+            CURRENT_SEASON,
+            sniper_display,
+            number,
+            snipee_display,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            proof_path,
+            sniper_id,
+            snipee_id
+        )
 
         proof_file = discord.File(proof_path, filename=os.path.basename(proof_path))
         await interaction.followup.send(f"{display_message}", file=proof_file)
