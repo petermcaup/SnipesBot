@@ -543,12 +543,15 @@ async def log_snipe(interaction: discord.Interaction, message_link: str, sniper:
             return
 
         # Fetch the message
-        channel = interaction.client.get_channel(channel_id)
-        if not channel:
-            await interaction.followup.send("❌ Could not find channel.", ephemeral=True)
+        try:
+            channel = await interaction.client.fetch_channel(channel_id)
+            message = await channel.fetch_message(message_id)
+        except discord.NotFound:
+            await interaction.followup.send("❌ Could not find message or channel.", ephemeral=True)
             return
-
-        message = await channel.fetch_message(message_id)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ Bot does not have permission to access that channel.", ephemeral=True)
+            return
         if not message.attachments:
             await interaction.followup.send("❌ Message has no attachments/proof image.", ephemeral=True)
             return
