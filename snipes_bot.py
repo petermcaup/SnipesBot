@@ -271,9 +271,16 @@ async def list_snipes(interaction: discord.Interaction, count: int = 10):
             await interaction.followup.send(f"No snipes recorded in `{CURRENT_SEASON}` yet.", ephemeral=True)
             return
 
-        # Get the last N snipes (skip header)
-        snipes = rows[1:][-count:]
-        snipes.reverse()  # Most recent first
+        # Filter out empty rows (where sniper column is None)
+        snipes = [row for row in rows[1:] if row[0] is not None]
+
+        if not snipes:
+            await interaction.followup.send(f"No snipes recorded in `{CURRENT_SEASON}` yet.", ephemeral=True)
+            return
+
+        # Get the last N snipes (most recent first)
+        snipes = snipes[-count:]
+        snipes.reverse()
 
         snipe_lines = []
         for idx, row in enumerate(snipes, 1):
@@ -284,7 +291,7 @@ async def list_snipes(interaction: discord.Interaction, count: int = 10):
 
         message = "\n".join(snipe_lines)
         await interaction.followup.send(
-            f"**Recent Snipes (Last {len(snipes)}):**\n{message}",
+            f"**Recent Snipes (Last {len(snipe_lines)}):**\n{message}",
             ephemeral=True
         )
     except Exception as e:
