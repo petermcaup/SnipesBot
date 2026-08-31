@@ -1,4 +1,7 @@
 /.venv
 /private
 /build
-/proofs
+/proofs/private/google_drive_token.json
+/SNIPES_*.csv
+/backup.log
+/auth_google_drive.py
