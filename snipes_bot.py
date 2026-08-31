@@ -276,7 +276,8 @@ async def list_snipes(interaction: discord.Interaction, count: int = 10):
         snipes.reverse()  # Most recent first
 
         snipe_lines = []
-        for idx, (sniper, points, snipee, timestamp, proof, sniper_id, snipee_id) in enumerate(snipes, 1):
+        for idx, row in enumerate(snipes, 1):
+            sniper, points, snipee, timestamp = row[0], row[1], row[2], row[3]
             snipe_lines.append(
                 f"**{idx}.** {sniper} → {snipee} | {points}pts | {timestamp}"
             )
