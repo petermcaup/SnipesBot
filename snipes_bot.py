@@ -91,7 +91,6 @@ def get_workbook():
     if _workbook_cache is not None and _workbook_cache_season == CURRENT_SEASON:
         return _workbook_cache
 
-    load_start = time.time()
     if not os.path.exists(EXCEL_FILE):
         _workbook_cache = openpyxl.Workbook()
     else:
