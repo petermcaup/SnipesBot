@@ -23,7 +23,7 @@ TOKEN = private.token
 OWNER_ID = int(private.owner_id) 
 
 # These will now point to SnipesBot\SNIPESSTATS.xlsm instead of SnipesBot\dist\SNIPESSTATS.xlsm
-EXCEL_FILE = os.path.join(BASE_DIR, 'SNIPESSTATS.xlsm')
+EXCEL_FILE = os.path.join(BASE_DIR, 'SNIPESSTATS.xlsx')
 REG_FILE = os.path.join(BASE_DIR, 'private', 'registrations.json')
 PROOFS_DIR = os.path.join(BASE_DIR, 'proofs')
 
@@ -95,7 +95,7 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
         sheet.title = CURRENT_SEASON
         sheet.append(["Sniper", "Points", "Snipee", "Timestamp", "Proof Link", "Sniper ID", "Snipee ID"])
     else:
-        workbook = openpyxl.load_workbook(EXCEL_FILE, keep_vba=True)
+        workbook = openpyxl.load_workbook(EXCEL_FILE)
         # Check if season tab exists, else create it
         if CURRENT_SEASON in workbook.sheetnames:
             sheet = workbook[CURRENT_SEASON]
