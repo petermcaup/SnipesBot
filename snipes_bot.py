@@ -187,15 +187,12 @@ async def async_backup():
     try:
         loop = asyncio.get_event_loop()
         # Merge CSV into Excel (current season only)
-        workbook = get_workbook()
-        workbook = await loop.run_in_executor(
+        await loop.run_in_executor(
             executor,
             merge_csv_to_excel,
             CURRENT_SEASON,
-            workbook
+            EXCEL_FILE
         )
-        # Save the merged workbook
-        await save_workbook_async(workbook)
         # Upload to Google Drive
         await loop.run_in_executor(executor, upload_backup, EXCEL_FILE)
         print(f"[BACKUP] Hourly backup completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -431,17 +428,13 @@ async def download_sheet(interaction: discord.Interaction):
 
     try:
         # Merge CSV into Excel (current season only)
-        workbook = get_workbook()
         loop = asyncio.get_event_loop()
-        workbook = await loop.run_in_executor(
+        await loop.run_in_executor(
             executor,
             merge_csv_to_excel,
             CURRENT_SEASON,
-            workbook
+            EXCEL_FILE
         )
-
-        # Save the merged workbook
-        await save_workbook_async(workbook)
 
         # Send the file as an attachment
         excel_file = discord.File(EXCEL_FILE, filename=f"SNIPESSTATS_{CURRENT_SEASON}.xlsx")
