@@ -330,13 +330,33 @@ async def edit_snipe(interaction: discord.Interaction, row: int, field: str, val
             await interaction.followup.send("No snipes to edit.", ephemeral=True)
             return
 
-        # Calculate actual Excel row number (skip header, account for list being most recent first)
-        snipes = rows[1:]
+        # Filter out empty rows (where sniper column is None)
+        snipes = [row for row in rows[1:] if row[0] is not None]
+
+        if not snipes:
+            await interaction.followup.send("No snipes to edit.", ephemeral=True)
+            return
+
         if row < 1 or row > len(snipes):
             await interaction.followup.send(f"❌ Invalid row number. Use a number from 1 to {len(snipes)}.", ephemeral=True)
             return
 
-        excel_row = len(snipes) - row + 2  # +2 because Excel rows are 1-indexed and row 1 is header
+        # Get the snipe to edit (accounting for reverse order: most recent first)
+        snipe_to_edit = snipes[-row]
+        sniper_match, points_match, snipee_match = snipe_to_edit[0], snipe_to_edit[1], snipe_to_edit[2]
+
+        # Find the actual Excel row number by searching for this snipe
+        excel_row = None
+        for search_row in range(2, sheet.max_row + 1):
+            if (sheet.cell(row=search_row, column=1).value == sniper_match and
+                sheet.cell(row=search_row, column=3).value == snipee_match and
+                sheet.cell(row=search_row, column=2).value == points_match):
+                excel_row = search_row
+                break
+
+        if excel_row is None:
+            await interaction.followup.send("❌ Could not find snipe to edit.", ephemeral=True)
+            return
 
         # Map field names to column numbers
         field_columns = {
@@ -423,21 +443,30 @@ async def delete_snipe(interaction: discord.Interaction, row: int):
             await interaction.followup.send("No snipes to delete.", ephemeral=True)
             return
 
-        # Calculate actual Excel row number (skip header, account for list being most recent first)
-        snipes = rows[1:]
+        # Filter out empty rows (where sniper column is None)
+        snipes = [row for row in rows[1:] if row[0] is not None]
+
+        if not snipes:
+            await interaction.followup.send("No snipes to delete.", ephemeral=True)
+            return
+
         if row < 1 or row > len(snipes):
             await interaction.followup.send(f"❌ Invalid row number. Use a number from 1 to {len(snipes)}.", ephemeral=True)
             return
 
-        excel_row = len(snipes) - row + 2  # +2 because Excel rows are 1-indexed and row 1 is header
+        # Get the snipe to delete (accounting for reverse order: most recent first)
+        snipe_to_delete = snipes[-row]
+        sniper, points, snipee = snipe_to_delete[0], snipe_to_delete[1], snipe_to_delete[2]
 
-        # Get the snipe info for confirmation
-        sniper = sheet.cell(row=excel_row, column=1).value
-        snipee = sheet.cell(row=excel_row, column=3).value
-        points = sheet.cell(row=excel_row, column=2).value
+        # Find the actual Excel row number by searching for this snipe
+        for excel_row in range(2, sheet.max_row + 1):
+            if (sheet.cell(row=excel_row, column=1).value == sniper and
+                sheet.cell(row=excel_row, column=3).value == snipee and
+                sheet.cell(row=excel_row, column=2).value == points):
+                # Delete the row
+                sheet.delete_rows(excel_row, 1)
+                break
 
-        # Delete the row
-        sheet.delete_rows(excel_row, 1)
         workbook.save(EXCEL_FILE)
 
         # Update row tracker
