@@ -7,6 +7,7 @@ from datetime import datetime
 from private import private
 import sys
 import os
+import time
 
 # --- DYNAMIC PATHING ---
 if getattr(sys, 'frozen', False):
@@ -103,16 +104,21 @@ async def download_attachment(attachment: discord.Attachment) -> str:
 
 def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_path):
     """Saves snipe data to the specific season tab in Excel."""
+    start_time = time.time()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    load_start = time.time()
     if not os.path.exists(EXCEL_FILE):
         workbook = openpyxl.Workbook()
         sheet = workbook.active
         sheet.title = CURRENT_SEASON
         sheet.append(["Sniper", "Points", "Snipee", "Timestamp", "Proof Link", "Sniper ID", "Snipee ID"])
         next_row = 2
+        print(f"[TIMER] Created new workbook: {time.time() - load_start:.3f}s")
     else:
         workbook = openpyxl.load_workbook(EXCEL_FILE)
+        print(f"[TIMER] Loaded workbook: {time.time() - load_start:.3f}s")
+
         # Check if season tab exists, else create it
         if CURRENT_SEASON in workbook.sheetnames:
             sheet = workbook[CURRENT_SEASON]
@@ -123,6 +129,7 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
         tracker = load_row_tracker()
         next_row = tracker.get(CURRENT_SEASON, 2)
 
+    write_start = time.time()
     sheet.cell(row=next_row, column=1).value = sniper_name
     sheet.cell(row=next_row, column=2).value = number
     sheet.cell(row=next_row, column=3).value = snipee_name
@@ -130,12 +137,17 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
     sheet.cell(row=next_row, column=5).value = proof_path
     sheet.cell(row=next_row, column=6).value = str(sniper_id)
     sheet.cell(row=next_row, column=7).value = str(snipee_id)
+    print(f"[TIMER] Wrote cells: {time.time() - write_start:.3f}s")
 
+    save_start = time.time()
     workbook.save(EXCEL_FILE)
+    print(f"[TIMER] Saved workbook: {time.time() - save_start:.3f}s")
 
     tracker = load_row_tracker()
     tracker[CURRENT_SEASON] = next_row + 1
     save_row_tracker(tracker)
+
+    print(f"[TIMER] Total Excel operation: {time.time() - start_time:.3f}s")
 
 # --- BOT SETUP ---
 
