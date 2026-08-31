@@ -183,9 +183,20 @@ def schedule_backup():
     schedule.every().hour.at(":00").do(lambda: asyncio.create_task(async_backup()))
 
 async def async_backup():
-    """Async wrapper for backup."""
+    """Async wrapper for backup. Merges CSV→Excel before uploading."""
     try:
         loop = asyncio.get_event_loop()
+        # Merge CSV into Excel (current season only)
+        workbook = get_workbook()
+        workbook = await loop.run_in_executor(
+            executor,
+            merge_csv_to_excel,
+            CURRENT_SEASON,
+            workbook
+        )
+        # Save the merged workbook
+        await save_workbook_async(workbook)
+        # Upload to Google Drive
         await loop.run_in_executor(executor, upload_backup, EXCEL_FILE)
         print(f"[BACKUP] Hourly backup completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     except Exception as e:

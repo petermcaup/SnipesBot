@@ -74,21 +74,20 @@ if __name__ == '__main__':
     print(f"Snipes: {snipes}")
 
 def merge_csv_to_excel(season, workbook):
-    """Merge CSV snipes into Excel sheet for the current season."""
+    """Merge CSV snipes into Excel sheet for the current season only. Preserves all other sheets."""
     import openpyxl
-    
-    # Get or create the sheet
+
+    # Get or create the sheet for current season
     if season in workbook.sheetnames:
         sheet = workbook[season]
-        # Clear existing data (keep header)
-        for row in sheet.iter_rows(min_row=2):
-            for cell in row:
-                cell.value = None
+        # Delete all data rows (keep header in row 1)
+        if sheet.max_row > 1:
+            sheet.delete_rows(2, sheet.max_row)
     else:
         sheet = workbook.create_sheet(season)
         sheet.append(['Sniper', 'Points', 'Snipee', 'Timestamp', 'Proof Link', 'Sniper ID', 'Snipee ID'])
-    
-    # Read CSV and write to Excel
+
+    # Read CSV and write to Excel (starts at row 2)
     snipes = get_snipes(season)
     for idx, snipe in enumerate(snipes, start=2):
         sheet.cell(row=idx, column=1).value = snipe['Sniper']
@@ -98,5 +97,6 @@ def merge_csv_to_excel(season, workbook):
         sheet.cell(row=idx, column=5).value = snipe['Proof Link']
         sheet.cell(row=idx, column=6).value = snipe['Sniper ID']
         sheet.cell(row=idx, column=7).value = snipe['Snipee ID']
-    
+
+    # All other sheets remain untouched
     return workbook
