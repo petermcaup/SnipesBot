@@ -45,12 +45,12 @@ def load_data():
     """Loads season and registration data from JSON."""
     if not os.path.exists(REG_FILE):
         # Default state if no file exists
-        return {"season": "SPRING2026", "registrations": {}}
+        return {"season": "FALL2026", "registrations": {}}
     with open(REG_FILE, 'r') as f:
         try:
             return json.load(f)
         except json.JSONDecodeError:
-            return {"season": "SPRING2026", "registrations": {}}
+            return {"season": "FALL2026", "registrations": {}}
 
 def save_data(season, registrations):
     """Saves season and registration data to JSON."""
@@ -78,7 +78,7 @@ def save_row_tracker(tracker):
 
 # Initialize current season from the saved file
 _initial_data = load_data()
-CURRENT_SEASON = _initial_data.get("season", "SPRING2026")
+CURRENT_SEASON = _initial_data.get("season", "FALL2026")
 
 # Cache workbook in memory to avoid reloading on every snipe
 _workbook_cache = None
