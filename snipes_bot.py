@@ -23,13 +23,18 @@ TOKEN = private.token
 OWNER_ID = int(private.owner_id) 
 
 # These will now point to SnipesBot\SNIPESSTATS.xlsm instead of SnipesBot\dist\SNIPESSTATS.xlsm
-EXCEL_FILE = os.path.join(BASE_DIR, 'SNIPESSTATS.xlsm') 
+EXCEL_FILE = os.path.join(BASE_DIR, 'SNIPESSTATS.xlsm')
 REG_FILE = os.path.join(BASE_DIR, 'private', 'registrations.json')
+PROOFS_DIR = os.path.join(BASE_DIR, 'proofs')
 
 # Ensure the private directory exists in the main folder
 PRIVATE_DIR = os.path.join(BASE_DIR, 'private')
 if not os.path.exists(PRIVATE_DIR):
     os.makedirs(PRIVATE_DIR)
+
+# Ensure the proofs directory exists
+if not os.path.exists(PROOFS_DIR):
+    os.makedirs(PROOFS_DIR)
 
 print(f"Bot starting... Working Directory: {BASE_DIR}")
 
@@ -65,9 +70,22 @@ def get_display_name(user_id, default_name):
     regs = data.get("registrations", {})
     return regs.get(str(user_id), default_name)
 
+async def download_attachment(attachment: discord.Attachment) -> str:
+    """Downloads attachment and saves it locally. Returns the local path."""
+    max_size = 10 * 1024 * 1024  # 10 MB limit
+    if attachment.size > max_size:
+        raise ValueError(f"File too large: {attachment.size / 1024 / 1024:.1f}MB (max 10MB)")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{timestamp}_{attachment.filename}"
+    filepath = os.path.join(PROOFS_DIR, filename)
+
+    await attachment.save(filepath)
+    return filepath
+
 # --- EXCEL LOGIC ---
 
-def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_url):
+def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_path):
     """Saves snipe data to the specific season tab in Excel."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -94,8 +112,8 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
     sheet.cell(row=next_row, column=2).value = number
     sheet.cell(row=next_row, column=3).value = snipee_name
     sheet.cell(row=next_row, column=4).value = timestamp
-    sheet.cell(row=next_row, column=5).value = proof_url
-    sheet.cell(row=next_row, column=6).value = str(sniper_id) 
+    sheet.cell(row=next_row, column=5).value = proof_path
+    sheet.cell(row=next_row, column=6).value = str(sniper_id)
     sheet.cell(row=next_row, column=7).value = str(snipee_id)
     
     workbook.save(EXCEL_FILE)
@@ -103,6 +121,7 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
 # --- BOT SETUP ---
 
 intents = discord.Intents.default()
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
@@ -210,12 +229,14 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
         display_message = f"**<@{snipee_id}> ({snipee_display}) got shot by {sniper_display} for {number} points**"
     
     try:
-        save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof.url)
-        await interaction.followup.send(f"{display_message}\n{proof.url}")
+        proof_path = await download_attachment(proof)
+        save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof_path)
+        await interaction.followup.send(f"{display_message}\n*Proof saved as: `{os.path.basename(proof_path)}`*")
+    except ValueError as e:
+        await interaction.followup.send(f"❌ **File Error:** {str(e)}")
     except PermissionError:
         await interaction.followup.send(f"⚠️ <@{OWNER_ID}> **CLOSE THE EXCEL SHEET**")
     except Exception as e:
-        # THIS IS YOUR DEBUGGER: It will print the exact error to Discord
         await interaction.followup.send(f"❌ **TECHNICAL ERROR:** `{str(e)}`")
         print(f"Error details: {e}")
 
