@@ -507,6 +507,75 @@ async def delete_snipe(interaction: discord.Interaction, row: int):
 
 # --- MAIN GAME COMMAND ---
 
+@bot.tree.command(name="log_snipe", description="Manually log a snipe from a Discord message (Owner Only)")
+@app_commands.describe(
+    message_link="Discord message link (https://discord.com/channels/...)",
+    sniper="Name of the sniper",
+    snipee="Name of the snipee",
+    points="Points value (1, 2, or 5)"
+)
+@app_commands.choices(points=[
+    app_commands.Choice(name="1", value=1),
+    app_commands.Choice(name="2", value=2),
+    app_commands.Choice(name="Alumni Snipe", value=5)
+])
+async def log_snipe(interaction: discord.Interaction, message_link: str, sniper: str, snipee: str, points: int):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        # Parse message link
+        parts = message_link.strip('/').split('/')
+        if len(parts) < 5 or parts[-3] != 'channels':
+            await interaction.followup.send("❌ Invalid message link format.", ephemeral=True)
+            return
+
+        channel_id = int(parts[-2])
+        message_id = int(parts[-1])
+
+        # Fetch the message
+        channel = interaction.client.get_channel(channel_id)
+        if not channel:
+            await interaction.followup.send("❌ Could not find channel.", ephemeral=True)
+            return
+
+        message = await channel.fetch_message(message_id)
+        if not message.attachments:
+            await interaction.followup.send("❌ Message has no attachments/proof image.", ephemeral=True)
+            return
+
+        # Download the attachment
+        proof_attachment = message.attachments[0]
+        proof_path = await download_attachment(proof_attachment)
+
+        # Append to CSV
+        await loop.run_in_executor(
+            executor,
+            append_snipe,
+            CURRENT_SEASON,
+            sniper,
+            points,
+            snipee,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            proof_path,
+            interaction.user.id,
+            0  # snipee_id unknown for manual logs
+        )
+
+        await interaction.followup.send(
+            f"✅ **Logged Snipe:**\n"
+            f"{sniper} → {snipee} ({points}pts)\n"
+            f"Proof: `{os.path.basename(proof_path)}`",
+            ephemeral=True
+        )
+    except ValueError:
+        await interaction.followup.send("❌ Invalid message link or points value.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 @bot.tree.command(name="snipe", description="Add a Snipe to the Excel Sheet")
 @app_commands.describe(number="Points value", user="Who did you snipe? (Leave blank for Alumni)", proof="Photo proof")
 @app_commands.choices(number=[
