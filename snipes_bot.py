@@ -26,6 +26,7 @@ OWNER_ID = int(private.owner_id)
 EXCEL_FILE = os.path.join(BASE_DIR, 'SNIPESSTATS.xlsx')
 REG_FILE = os.path.join(BASE_DIR, 'private', 'registrations.json')
 PROOFS_DIR = os.path.join(BASE_DIR, 'proofs')
+ROW_TRACKER_FILE = os.path.join(BASE_DIR, 'private', 'row_tracker.json')
 
 # Ensure the private directory exists in the main folder
 PRIVATE_DIR = os.path.join(BASE_DIR, 'private')
@@ -59,6 +60,21 @@ def save_data(season, registrations):
     }
     with open(REG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
+
+def load_row_tracker():
+    """Loads the next row number for each sheet."""
+    if not os.path.exists(ROW_TRACKER_FILE):
+        return {}
+    with open(ROW_TRACKER_FILE, 'r') as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return {}
+
+def save_row_tracker(tracker):
+    """Saves the next row number for each sheet."""
+    with open(ROW_TRACKER_FILE, 'w') as f:
+        json.dump(tracker, f, indent=4)
 
 # Initialize current season from the saved file
 _initial_data = load_data()
@@ -94,6 +110,7 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
         sheet = workbook.active
         sheet.title = CURRENT_SEASON
         sheet.append(["Sniper", "Points", "Snipee", "Timestamp", "Proof Link", "Sniper ID", "Snipee ID"])
+        next_row = 2
     else:
         workbook = openpyxl.load_workbook(EXCEL_FILE)
         # Check if season tab exists, else create it
@@ -103,10 +120,8 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
             sheet = workbook.create_sheet(CURRENT_SEASON)
             sheet.append(["Sniper", "Points", "Snipee", "Timestamp", "Proof Link", "Sniper ID", "Snipee ID"])
 
-    # Find next empty row in Column A (avoids overwriting charts/pivot tables elsewhere)
-    next_row = 1
-    while sheet.cell(row=next_row, column=1).value is not None:
-        next_row += 1
+        tracker = load_row_tracker()
+        next_row = tracker.get(CURRENT_SEASON, 2)
 
     sheet.cell(row=next_row, column=1).value = sniper_name
     sheet.cell(row=next_row, column=2).value = number
@@ -115,8 +130,12 @@ def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, proof_
     sheet.cell(row=next_row, column=5).value = proof_path
     sheet.cell(row=next_row, column=6).value = str(sniper_id)
     sheet.cell(row=next_row, column=7).value = str(snipee_id)
-    
+
     workbook.save(EXCEL_FILE)
+
+    tracker = load_row_tracker()
+    tracker[CURRENT_SEASON] = next_row + 1
+    save_row_tracker(tracker)
 
 # --- BOT SETUP ---
 
@@ -208,13 +227,10 @@ async def deregister_autocomplete(interaction: discord.Interaction, current: str
     app_commands.Choice(name="Alumni Snipe", value=5)
 ])
 async def snipe(interaction: discord.Interaction, number: int, proof: discord.Attachment, user: discord.User = None):
-    # Defer immediately to prevent timeout errors
     await interaction.response.defer()
-    print(f"[SNIPE] Command started by {interaction.user.name}")
 
     sniper_display = get_display_name(interaction.user.id, interaction.user.name)
     sniper_id = interaction.user.id
-    print(f"[SNIPE] Got sniper display name: {sniper_display}")
 
     # Handle Alumni logic vs Standard Snipe
     if user is None:
@@ -233,21 +249,16 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
     print(f"[SNIPE] About to download attachment: {proof.filename} ({proof.size} bytes)")
     try:
         proof_path = await download_attachment(proof)
-        print(f"[SNIPE] Attachment downloaded to: {proof_path}")
-
-        print(f"[SNIPE] Saving to Excel...")
         save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof_path)
-        print(f"[SNIPE] Excel saved successfully")
 
         proof_file = discord.File(proof_path, filename=os.path.basename(proof_path))
         await interaction.followup.send(f"{display_message}", file=proof_file)
-        print(f"[SNIPE] Discord message sent successfully")
     except ValueError as e:
         await interaction.followup.send(f"❌ **File Error:** {str(e)}")
     except PermissionError:
         await interaction.followup.send(f"⚠️ <@{OWNER_ID}> **CLOSE THE EXCEL SHEET**")
     except Exception as e:
         await interaction.followup.send(f"❌ **TECHNICAL ERROR:** `{str(e)}`")
-        print(f"[SNIPE] Error details: {e}")
+        print(f"Error in snipe command: {e}")
 
 bot.run(TOKEN)
