@@ -527,14 +527,20 @@ async def log_snipe(interaction: discord.Interaction, message_link: str, sniper:
     await interaction.response.defer(ephemeral=True)
 
     try:
-        # Parse message link
-        parts = message_link.strip('/').split('/')
-        if len(parts) < 5 or parts[-3] != 'channels':
-            await interaction.followup.send("❌ Invalid message link format.", ephemeral=True)
-            return
+        # Parse message link: https://discord.com/channels/GUILD_ID/CHANNEL_ID/MESSAGE_ID
+        try:
+            parts = message_link.strip('/').split('/')
+            # Expected format after split: ['https:', '', 'discord.com', 'channels', GUILD_ID, CHANNEL_ID, MESSAGE_ID]
+            if 'channels' not in parts:
+                raise ValueError("Invalid format")
 
-        channel_id = int(parts[-2])
-        message_id = int(parts[-1])
+            # Get the last 3 parts as guild_id, channel_id, message_id
+            message_id = int(parts[-1])
+            channel_id = int(parts[-2])
+            guild_id = int(parts[-3])
+        except (ValueError, IndexError):
+            await interaction.followup.send("❌ Invalid message link format. Use: `https://discord.com/channels/GUILD/CHANNEL/MESSAGE`", ephemeral=True)
+            return
 
         # Fetch the message
         channel = interaction.client.get_channel(channel_id)
