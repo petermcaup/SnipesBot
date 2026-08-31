@@ -433,11 +433,9 @@ async def delete_snipe(interaction: discord.Interaction, row: int):
     app_commands.Choice(name="Alumni Snipe", value=5)
 ])
 async def snipe(interaction: discord.Interaction, number: int, proof: discord.Attachment, user: discord.User = None):
-    await interaction.response.defer()
-
-    # Check if command is being run in the correct channel
+    # Check if command is being run in the correct channel (BEFORE defer)
     if interaction.channel.name != "ssnipes":
-        await interaction.followup.send(f"❌ Snipes must be recorded in #ssnipes channel.", ephemeral=True)
+        await interaction.response.send_message(f"❌ Snipes must be recorded in #ssnipes channel.", ephemeral=True)
         return
 
     sniper_display = get_display_name(interaction.user.id, interaction.user.name)
@@ -450,15 +448,15 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
             snipee_id = "0000"
             display_message = f"**{sniper_display} got an Alumni Snipe for 5 points!**"
         else:
-            await interaction.followup.send("❌ You must select a user unless it is an Alumni Snipe (5 pts).", ephemeral=True)
+            await interaction.response.send_message("❌ You must select a user unless it is an Alumni Snipe (5 pts).", ephemeral=True)
             return
     else:
         data = load_data()
         regs = data.get("registrations", {})
 
-        # Check if the snipee is registered
+        # Check if the snipee is registered (BEFORE defer)
         if str(user.id) not in regs:
-            await interaction.followup.send(
+            await interaction.response.send_message(
                 f"❌ **{user.name}** is not registered. Ask an admin to register them first using `/register`.",
                 ephemeral=True
             )
@@ -467,6 +465,9 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
         snipee_display = get_display_name(user.id, user.name)
         snipee_id = user.id
         display_message = f"**<@{snipee_id}> ({snipee_display}) got shot by {sniper_display} for {number} points**"
+
+    # All validation passed, now defer
+    await interaction.response.defer()
 
     print(f"[SNIPE] About to download attachment: {proof.filename} ({proof.size} bytes)")
     try:
