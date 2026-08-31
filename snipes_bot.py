@@ -369,6 +369,29 @@ async def edit_snipe(interaction: discord.Interaction, row: int, field: str, val
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 
+@bot.tree.command(name="download_sheet", description="Download the current Excel sheet (Owner Only)")
+async def download_sheet(interaction: discord.Interaction):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        # Ensure the workbook is saved to disk
+        workbook = get_workbook()
+        workbook.save(EXCEL_FILE)
+
+        # Send the file as an attachment
+        excel_file = discord.File(EXCEL_FILE, filename=f"SNIPESSTATS_{CURRENT_SEASON}.xlsx")
+        await interaction.followup.send(
+            f"📊 **Current Sheet ({CURRENT_SEASON}):**",
+            file=excel_file,
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
 @bot.tree.command(name="delete_snipe", description="Delete a snipe from the logs (Owner Only)")
 @app_commands.describe(row="Row number from /list_snipes")
 async def delete_snipe(interaction: discord.Interaction, row: int):
