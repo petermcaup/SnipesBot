@@ -9,6 +9,8 @@ import sys
 import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import schedule
+from google_drive_backup import upload_backup
 
 # --- DYNAMIC PATHING ---
 if getattr(sys, 'frozen', False):
@@ -146,6 +148,10 @@ async def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, 
     tracker = load_row_tracker()
     next_row = tracker.get(CURRENT_SEASON, 2)
 
+    # Safeguard: ensure next_row is at least 2
+    if next_row < 2:
+        next_row = 2
+
     sheet.cell(row=next_row, column=1).value = sniper_name
     sheet.cell(row=next_row, column=2).value = number
     sheet.cell(row=next_row, column=3).value = snipee_name
@@ -165,6 +171,25 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+async def backup_task():
+    """Run hourly backup to Google Drive."""
+    while True:
+        schedule.run_pending()
+        await asyncio.sleep(60)
+
+def schedule_backup():
+    """Schedule backup every hour."""
+    schedule.every().hour.at(":00").do(lambda: asyncio.create_task(async_backup()))
+
+async def async_backup():
+    """Async wrapper for backup."""
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(executor, upload_backup, EXCEL_FILE)
+        print(f"[BACKUP] Hourly backup completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    except Exception as e:
+        print(f"[BACKUP] Error: {e}")
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}!')
@@ -173,6 +198,11 @@ async def on_ready():
         print(f"Synced {len(synced)} command(s).")
     except Exception as e:
         print(e)
+
+    # Schedule backup on first ready
+    if not bot.loop.is_running():
+        schedule_backup()
+        bot.loop.create_task(backup_task())
 
 # --- ADMIN COMMANDS ---
 
