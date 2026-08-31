@@ -210,9 +210,11 @@ async def deregister_autocomplete(interaction: discord.Interaction, current: str
 async def snipe(interaction: discord.Interaction, number: int, proof: discord.Attachment, user: discord.User = None):
     # Defer immediately to prevent timeout errors
     await interaction.response.defer()
-    
+    print(f"[SNIPE] Command started by {interaction.user.name}")
+
     sniper_display = get_display_name(interaction.user.id, interaction.user.name)
     sniper_id = interaction.user.id
+    print(f"[SNIPE] Got sniper display name: {sniper_display}")
 
     # Handle Alumni logic vs Standard Snipe
     if user is None:
@@ -227,17 +229,24 @@ async def snipe(interaction: discord.Interaction, number: int, proof: discord.At
         snipee_display = get_display_name(user.id, user.name)
         snipee_id = user.id
         display_message = f"**<@{snipee_id}> ({snipee_display}) got shot by {sniper_display} for {number} points**"
-    
+
+    print(f"[SNIPE] About to download attachment: {proof.filename} ({proof.size} bytes)")
     try:
         proof_path = await download_attachment(proof)
+        print(f"[SNIPE] Attachment downloaded to: {proof_path}")
+
+        print(f"[SNIPE] Saving to Excel...")
         save_to_excel(sniper_display, sniper_id, number, snipee_display, snipee_id, proof_path)
+        print(f"[SNIPE] Excel saved successfully")
+
         await interaction.followup.send(f"{display_message}\n*Proof saved as: `{os.path.basename(proof_path)}`*")
+        print(f"[SNIPE] Discord message sent successfully")
     except ValueError as e:
         await interaction.followup.send(f"❌ **File Error:** {str(e)}")
     except PermissionError:
         await interaction.followup.send(f"⚠️ <@{OWNER_ID}> **CLOSE THE EXCEL SHEET**")
     except Exception as e:
         await interaction.followup.send(f"❌ **TECHNICAL ERROR:** `{str(e)}`")
-        print(f"Error details: {e}")
+        print(f"[SNIPE] Error details: {e}")
 
 bot.run(TOKEN)
