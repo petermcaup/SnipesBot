@@ -114,23 +114,27 @@ def upload_backup(excel_file_path):
     
     return file['id']
 
-def cleanup_old_backups(service, folder_id):
-    """Delete backups older than 5 hours."""
-    cutoff_time = datetime.utcnow() - timedelta(hours=5)
-    cutoff_iso = cutoff_time.isoformat() + 'Z'
-    
-    # List files older than 5 hours
+def cleanup_old_backups(service, folder_id, keep_count=5):
+    """Keep only the N most recent backups, delete older ones."""
+    # List all backups in the folder
     results = service.files().list(
-        q=f"'{folder_id}' in parents and createdTime < '{cutoff_iso}' and trashed=false",
+        q=f"'{folder_id}' in parents and trashed=false",
         spaces='drive',
-        pageSize=10,
-        fields='files(id, name, createdTime)'
+        pageSize=50,
+        fields='files(id, name, createdTime)',
+        orderBy='createdTime desc'
     ).execute()
-    
+
     files = results.get('files', [])
-    for file in files:
-        service.files().delete(fileId=file['id']).execute()
-        print(f"🗑️ Deleted old backup: {file['name']}")
+
+    # Delete files beyond the keep_count
+    if len(files) > keep_count:
+        files_to_delete = files[keep_count:]
+        for file in files_to_delete:
+            service.files().delete(fileId=file['id']).execute()
+            print(f"🗑️ Deleted old backup: {file['name']} (keeping {keep_count} most recent)")
+    else:
+        print(f"📊 Total backups: {len(files)} (keeping all until we have {keep_count})")
 
 if __name__ == '__main__':
     # Test upload
