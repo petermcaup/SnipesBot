@@ -311,13 +311,9 @@ async def list_users(interaction: discord.Interaction):
         ephemeral=True
     )
 
-@bot.tree.command(name="list_snipes", description="Show recent snipes (Owner Only)")
+@bot.tree.command(name="list_snipes", description="Show recent snipes")
 @app_commands.describe(count="Number of recent snipes to show (default: 10)")
 async def list_snipes(interaction: discord.Interaction, count: int = 10):
-    if interaction.user.id != OWNER_ID:
-        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
-        return
-
     await interaction.response.defer(ephemeral=True)
 
     try:
