@@ -170,6 +170,7 @@ async def save_to_excel(sniper_name, sniper_id, number, snipee_name, snipee_id, 
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def backup_task():
