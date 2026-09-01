@@ -173,19 +173,27 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def backup_task():
-    """Run hourly backup to Google Drive."""
+    """Run scheduled backups indefinitely."""
     while True:
         schedule.run_pending()
         await asyncio.sleep(60)
 
+_backup_scheduled = False
+
 def schedule_backup():
-    """Schedule backup every hour."""
-    schedule.every().hour.at(":00").do(lambda: asyncio.create_task(async_backup()))
+    """Schedule backup every hour (prevents duplicate schedules)."""
+    global _backup_scheduled
+    if _backup_scheduled:
+        return
+    schedule.every().hour.do(lambda: asyncio.create_task(async_backup()))
+    _backup_scheduled = True
+    print(f"[BACKUP] Scheduled hourly backups starting at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 async def async_backup():
     """Async wrapper for backup. Merges CSV→Excel before uploading."""
     try:
         loop = asyncio.get_event_loop()
+        print(f"[BACKUP] Starting backup at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         # Merge CSV into Excel (current season only)
         await loop.run_in_executor(
             executor,
@@ -195,12 +203,17 @@ async def async_backup():
         )
         # Upload to Google Drive
         await loop.run_in_executor(executor, upload_backup, EXCEL_FILE)
-        print(f"[BACKUP] Hourly backup completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"[BACKUP] Hourly backup completed successfully at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     except Exception as e:
-        print(f"[BACKUP] Error: {e}")
+        print(f"[BACKUP] Error during backup: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+
+_backup_task_running = False
 
 @bot.event
 async def on_ready():
+    global _backup_task_running
     print(f'Logged in as {bot.user}!')
     try:
         synced = await bot.tree.sync()
@@ -208,9 +221,10 @@ async def on_ready():
     except Exception as e:
         print(e)
 
-    # Schedule backup on first ready
-    if not bot.loop.is_running():
-        schedule_backup()
+    # Schedule backup and start task (only once)
+    schedule_backup()
+    if not _backup_task_running:
+        _backup_task_running = True
         bot.loop.create_task(backup_task())
 
 # --- ADMIN COMMANDS ---
@@ -443,6 +457,47 @@ async def download_sheet(interaction: discord.Interaction):
             file=excel_file,
             ephemeral=True
         )
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name="backup_now", description="Manually trigger a backup to Google Drive (Owner Only)")
+async def backup_now(interaction: discord.Interaction):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        await interaction.followup.send("⏳ Backup in progress...", ephemeral=True)
+        await async_backup()
+        await interaction.followup.send("✅ Backup completed successfully!", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Backup failed: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name="backup_status", description="Check backup schedule status (Owner Only)")
+async def backup_status(interaction: discord.Interaction):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You don't have permission for this.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        jobs = schedule.jobs
+        if not jobs:
+            await interaction.followup.send(
+                "⚠️ **No backups scheduled!**\nRestart the bot to enable automatic backups.",
+                ephemeral=True
+            )
+            return
+
+        job_info = f"**Backup Schedule Status:**\n"
+        job_info += f"Scheduled jobs: {len(jobs)}\n"
+        for job in jobs:
+            job_info += f"• Next run: {job.next_run.strftime('%Y-%m-%d %H:%M:%S')}\n"
+
+        await interaction.followup.send(job_info, ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
 

@@ -6,19 +6,26 @@ from googleapiclient.http import MediaFileUpload
 from datetime import datetime, timedelta
 import json
 import os
+import sys
 
-TOKEN_FILE = 'private/google_drive_token.json'
-CREDENTIALS_FILE = 'private/credentials.json'
+# Use BASE_DIR for consistent path handling across Windows and Pi
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(os.path.dirname(sys.executable))
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+TOKEN_FILE = os.path.join(BASE_DIR, 'private', 'google_drive_token.json')
+CREDENTIALS_FILE = os.path.join(BASE_DIR, 'private', 'credentials.json')
 BACKUP_FOLDER_NAME = 'SnipesBot Backups'
 
 def load_credentials():
     """Load saved Google Drive credentials."""
     if not os.path.exists(TOKEN_FILE):
         return None
-    
+
     with open(TOKEN_FILE, 'r') as f:
         creds_data = json.load(f)
-    
+
     creds = Credentials(
         token=creds_data['token'],
         refresh_token=creds_data['refresh_token'],
@@ -27,12 +34,26 @@ def load_credentials():
         client_secret=creds_data['client_secret'],
         scopes=creds_data['scopes']
     )
-    
-    # Refresh if needed
+
+    # Refresh if needed and save back to file
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
-    
+        save_credentials(creds)
+
     return creds
+
+def save_credentials(creds):
+    """Save refreshed credentials back to the token file."""
+    creds_data = {
+        'token': creds.token,
+        'refresh_token': creds.refresh_token,
+        'token_uri': creds.token_uri,
+        'client_id': creds.client_id,
+        'client_secret': creds.client_secret,
+        'scopes': creds.scopes
+    }
+    with open(TOKEN_FILE, 'w') as f:
+        json.dump(creds_data, f, indent=4)
 
 def get_drive_service():
     """Get authenticated Google Drive service."""
