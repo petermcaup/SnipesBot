@@ -11,7 +11,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import schedule
 from google_drive_backup import upload_backup
-from csv_storage import append_snipe, get_snipes, edit_snipe, delete_snipe, merge_csv_to_excel
+from csv_storage import append_snipe, get_snipes, edit_snipe as csv_edit_snipe, delete_snipe as csv_delete_snipe, merge_csv_to_excel
 
 # --- DYNAMIC PATHING ---
 if getattr(sys, 'frozen', False):
@@ -336,7 +336,7 @@ async def list_snipes(interaction: discord.Interaction, count: int = 10):
             snipee = snipe['Snipee']
             timestamp = snipe['Timestamp']
             snipe_lines.append(
-                f"**{idx}.** {sniper} → {snipee} | {points}pts | {timestamp}"
+                f"**{idx}.** {sniper} sniped {snipee} | {points}pts | {timestamp}"
             )
 
         message = "\n".join(snipe_lines)
@@ -410,7 +410,7 @@ async def edit_snipe(interaction: discord.Interaction, row: int, field: str, val
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             executor,
-            edit_snipe,
+            csv_edit_snipe,
             CURRENT_SEASON,
             sniper_match,
             snipee_match,
@@ -542,7 +542,7 @@ async def delete_snipe(interaction: discord.Interaction, row: int):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             executor,
-            delete_snipe,
+            csv_delete_snipe,
             CURRENT_SEASON,
             sniper,
             snipee,
@@ -613,6 +613,7 @@ async def log_snipe(interaction: discord.Interaction, message_link: str, sniper:
         proof_path = await download_attachment(proof_attachment)
 
         # Append to CSV
+        loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             executor,
             append_snipe,
